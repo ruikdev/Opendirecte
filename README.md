@@ -230,10 +230,6 @@ Les contributions sont les bienvenues ! N'hésitez pas à :
 
 Projet maintenu par [@ruikdev](https://github.com/ruikdev)
 
-## 🙏 Remerciements
-
-Merci à tous les contributeurs qui ont participé au développement d'OpenDirecte !
-
 ---
 
 **OpenDirecte** - Une alternative libre et open source pour l'éducation 🎓
