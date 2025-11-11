@@ -38,6 +38,11 @@ def prof_or_admin_required(f):
     return role_required('prof', 'admin')(f)
 
 
+def parent_or_admin_required(f):
+    """Décorateur pour les endpoints parent ou admin"""
+    return role_required('parent', 'admin')(f)
+
+
 def is_owner_or_admin(user, resource_user_id):
     """Vérifie si l'utilisateur est propriétaire ou admin"""
     return user.role == 'admin' or user.id == resource_user_id
@@ -46,3 +51,10 @@ def is_owner_or_admin(user, resource_user_id):
 def user_in_group(user, group_id):
     """Vérifie si l'utilisateur appartient au groupe"""
     return any(g.id == group_id for g in user.groups)
+
+
+def is_parent_of_child(parent, child_id):
+    """Vérifie si l'utilisateur est le parent de l'enfant"""
+    if parent.role != 'parent':
+        return False
+    return any(c.id == child_id for c in parent.children)

@@ -4,7 +4,7 @@ from flask_jwt_extended import jwt_required
 from icalendar import Calendar
 from datetime import datetime, timedelta
 from core.extensions import db
-from core.models import CalendarEvent, Group
+from core.models import CalendarEvent, Group, User
 from core.permissions import get_current_user, admin_required, prof_or_admin_required
 
 calendar_bp = Blueprint('calendar', __name__, url_prefix='/api/v1/calendar')
@@ -13,11 +13,29 @@ calendar_bp = Blueprint('calendar', __name__, url_prefix='/api/v1/calendar')
 @calendar_bp.route('', methods=['GET'])
 @jwt_required()
 def list_events():
-    """Lister les événements pour les groupes de l'utilisateur"""
+    """Lister les événements pour les groupes de l'utilisateur (ou des enfants pour les parents)"""
     current_user = get_current_user()
+    
+    # Paramètre optionnel pour les parents: child_id
+    child_id = request.args.get('child_id', type=int)
     
     if current_user.role == 'admin':
         events = CalendarEvent.query.all()
+    elif current_user.role == 'parent':
+        # Parent voit l'emploi du temps de ses enfants
+        if child_id:
+            # Vérifier que l'enfant appartient bien au parent
+            child = User.query.get(child_id)
+            if not child or child not in current_user.children:
+                return jsonify({'error': 'Child not found or not associated with your account'}), 403
+            group_ids = [g.id for g in child.groups]
+        else:
+            # Récupérer tous les emplois du temps de tous les enfants
+            group_ids = []
+            for child in current_user.children:
+                group_ids.extend([g.id for g in child.groups])
+            group_ids = list(set(group_ids))  # Supprimer les doublons
+        events = CalendarEvent.query.filter(CalendarEvent.group_id.in_(group_ids)).all() if group_ids else []
     else:
         # Récupérer les événements des groupes de l'utilisateur
         group_ids = [g.id for g in current_user.groups]

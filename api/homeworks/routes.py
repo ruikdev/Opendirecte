@@ -2,7 +2,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from core.extensions import db
-from core.models import Homework, Group
+from core.models import Homework, Group, User
 from core.permissions import get_current_user, prof_or_admin_required, user_in_group
 from core.utils import validate_date
 from datetime import datetime
@@ -19,6 +19,7 @@ def list_homeworks():
     # Paramètres de filtrage
     status = request.args.get('status')  # 'all', 'pending', 'completed', 'overdue'
     group_id = request.args.get('group_id')
+    child_id = request.args.get('child_id', type=int)  # Pour les parents
     
     if current_user.role == 'admin':
         # Admin voit tous les devoirs
@@ -26,6 +27,24 @@ def list_homeworks():
     elif current_user.role == 'prof':
         # Prof voit uniquement les devoirs qu'il a créés
         query = Homework.query.filter(Homework.author_id == current_user.id)
+    elif current_user.role == 'parent':
+        # Parent voit les devoirs de ses enfants
+        if child_id:
+            # Vérifier que l'enfant appartient bien au parent
+            child = User.query.get(child_id)
+            if not child or child not in current_user.children:
+                return jsonify({'error': 'Child not found or not associated with your account'}), 403
+            group_ids = [g.id for g in child.groups]
+        else:
+            # Récupérer tous les devoirs de tous les enfants
+            group_ids = []
+            for child in current_user.children:
+                group_ids.extend([g.id for g in child.groups])
+            group_ids = list(set(group_ids))  # Supprimer les doublons
+        
+        if not group_ids:
+            return jsonify({'homeworks': []}), 200
+        query = Homework.query.filter(Homework.group_id.in_(group_ids))
     else:
         # Élève voit les devoirs des groupes auxquels il appartient
         group_ids = [g.id for g in current_user.groups]
@@ -39,13 +58,16 @@ def list_homeworks():
     
     homeworks = query.order_by(Homework.due_date.asc()).all()
     
-    # Filtrer par statut (uniquement pour les élèves)
-    if status and current_user.role == 'eleve':
+    # Filtrer par statut (uniquement pour les élèves et parents)
+    if status and current_user.role in ['eleve', 'parent']:
         now = datetime.utcnow()
         filtered_homeworks = []
         
+        # Pour les parents, utiliser l'enfant sélectionné
+        user_id_for_check = child_id if current_user.role == 'parent' and child_id else current_user.id
+        
         for h in homeworks:
-            is_completed = any(u.id == current_user.id for u in h.completed_by)
+            is_completed = any(u.id == user_id_for_check for u in h.completed_by)
             is_overdue = h.due_date < now
             
             if status == 'completed' and is_completed:
@@ -59,8 +81,11 @@ def list_homeworks():
         
         homeworks = filtered_homeworks
     
+    # Utiliser l'ID approprié pour vérifier la complétion
+    user_id_for_dict = child_id if current_user.role == 'parent' and child_id else current_user.id
+    
     return jsonify({
-        'homeworks': [h.to_dict(user_id=current_user.id) for h in homeworks]
+        'homeworks': [h.to_dict(user_id=user_id_for_dict) for h in homeworks]
     }), 200
 
 

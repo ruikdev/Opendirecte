@@ -8,6 +8,9 @@ if (!token) {
 const user = JSON.parse(localStorage.getItem('user') || '{}');
 document.getElementById('userName').textContent = user.username || '';
 
+// Variable globale pour stocker l'enfant sélectionné (pour les parents)
+let selectedChildId = null;
+
 // Fonction de déconnexion
 function logout() {
     localStorage.removeItem('access_token');
@@ -16,10 +19,65 @@ function logout() {
     window.location.href = '/';
 }
 
+// Charger les enfants pour un parent
+async function loadChildren() {
+    if (user.role !== 'parent') return;
+    
+    try {
+        const response = await fetch(`/api/v1/users/${user.id}/children`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (!response.ok) throw new Error('Failed to load children');
+        
+        const data = await response.json();
+        
+        if (data.children && data.children.length > 0) {
+            // Créer le sélecteur d'enfant
+            const container = document.getElementById('notesContainer');
+            const selector = `
+                <div class="mb-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-2 border-green-200">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        <svg class="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                        </svg>
+                        Sélectionner un enfant
+                    </label>
+                    <select id="childSelector" onchange="onChildChange()" class="w-full px-4 py-3 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white shadow-sm">
+                        <option value="">-- Tous les enfants --</option>
+                        ${data.children.map(child => `
+                            <option value="${child.id}">${child.username} (${child.email})</option>
+                        `).join('')}
+                    </select>
+                </div>
+                <div id="notesContent"></div>
+            `;
+            container.innerHTML = selector;
+        }
+    } catch (error) {
+        console.error('Error loading children:', error);
+    }
+}
+
+// Gestionnaire de changement de sélection d'enfant
+function onChildChange() {
+    const selector = document.getElementById('childSelector');
+    selectedChildId = selector.value ? parseInt(selector.value) : null;
+    loadNotes();
+}
+
 // Charger les notes
 async function loadNotes() {
     try {
-        const response = await fetch('/api/v1/notes', {
+        // Construire l'URL avec le paramètre child_id si nécessaire
+        let url = '/api/v1/notes';
+        if (user.role === 'parent' && selectedChildId) {
+            url += `?child_id=${selectedChildId}`;
+        }
+        
+        const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -30,7 +88,12 @@ async function loadNotes() {
         }
         
         const data = await response.json();
-        const container = document.getElementById('notesContainer');
+        const container = user.role === 'parent' ? document.getElementById('notesContent') : document.getElementById('notesContainer');
+        
+        if (!container) {
+            console.error('Container not found');
+            return;
+        }
         
         if (data.notes && data.notes.length > 0) {
             // Grouper les notes par matière
@@ -59,7 +122,7 @@ async function loadNotes() {
                                     <div>
                                         <p class="text-gray-700">${note.comment || 'Note'}</p>
                                         <p class="text-sm text-gray-500">
-                                            ${user.role === 'eleve' ? 'Prof: ' + note.teacher : 'Élève: ' + note.student}
+                                            ${user.role === 'eleve' || user.role === 'parent' ? 'Prof: ' + note.teacher : 'Élève: ' + note.student}
                                         </p>
                                     </div>
                                     <div class="text-right">
@@ -81,9 +144,19 @@ async function loadNotes() {
         }
     } catch (error) {
         console.error('Error loading notes:', error);
-        document.getElementById('notesContainer').innerHTML = '<p class="text-red-500">Erreur lors du chargement des notes.</p>';
+        const container = user.role === 'parent' ? document.getElementById('notesContent') : document.getElementById('notesContainer');
+        if (container) {
+            container.innerHTML = '<p class="text-red-500">Erreur lors du chargement des notes.</p>';
+        }
     }
 }
 
-// Charger les notes au chargement de la page
-loadNotes();
+// Initialisation
+async function init() {
+    if (user.role === 'parent') {
+        await loadChildren();
+    }
+    await loadNotes();
+}
+
+init();

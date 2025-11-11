@@ -8,7 +8,9 @@
 - **Monolithique** : Frontend et Backend intégrés sur un seul serveur Flask
 - **Moderne** : Interface utilisateur avec TailwindCSS
 - **Complet** : Gestion des utilisateurs, groupes, devoirs, notes, messages, calendrier
-- **Extensible** : API REST documentée
+- **Comptes Parents** : Les parents peuvent suivre la scolarité de leurs enfants avec sélecteur d'enfant
+- **Multi-rôles** : Élèves, Professeurs, Parents et Administrateurs
+- **Extensible** : API REST complète et documentée
 
 ## 🏗️ Architecture
 
@@ -95,6 +97,55 @@ Un compte administrateur est créé automatiquement au premier lancement :
 
 ⚠️ **Important** : Changez ce mot de passe en production !
 
+## 🎨 Interface Utilisateur
+
+### Panneau d'Administration
+
+L'interface admin (`/admin`) offre une gestion complète via 4 onglets :
+
+1. **👥 Utilisateurs** : 
+   - Liste de tous les utilisateurs avec badges colorés par rôle
+   - Création, édition, suppression
+   - Gestion des groupes pour chaque utilisateur
+   - Recherche et filtrage en temps réel
+
+2. **📚 Groupes/Classes** :
+   - Gestion des classes et clubs
+   - Visualisation du nombre de membres
+   - CRUD complet
+
+3. **📢 Annonces** :
+   - Publier des annonces sur le fil d'actualités
+   - Modifier et supprimer les annonces existantes
+
+4. **👨‍👩‍👧‍👦 Parents** (Nouveau !) :
+   - Vue dédiée aux comptes parents
+   - Association graphique parent-enfant
+   - Visualisation des enfants avec leurs classes
+   - Modale interactive pour gérer les associations
+
+### Pages Utilisateur
+
+- **🏠 Dashboard** : Accès rapide à tous les modules
+- **📝 Devoirs** : Gestion et suivi des devoirs avec filtres
+- **📊 Notes** : Visualisation des notes par matière avec moyennes
+- **📅 Calendrier** : Emploi du temps hebdomadaire
+- **💬 Messages** : Système de messagerie interne
+
+### Design
+
+- Interface moderne avec **TailwindCSS**
+- Design responsive (mobile, tablette, desktop)
+- Badges colorés pour identifier les rôles :
+  - 🟣 Violet : Admin
+  - 🔵 Bleu : Professeur
+  - 🟢 Vert : Élève
+  - 🟡 Jaune : Parent
+- Sélecteur d'enfant thématique par page :
+  - 🔵 Bleu : Devoirs
+  - 🟢 Vert : Notes
+  - 🟠 Orange : Calendrier
+
 ## 📚 API Documentation
 
 ### Endpoints disponibles
@@ -113,6 +164,9 @@ Un compte administrateur est créé automatiquement au premier lancement :
 - `PUT /api/v1/users/<id>` - Modifier utilisateur
 - `DELETE /api/v1/users/<id>` - Supprimer utilisateur (admin)
 - `PUT /api/v1/users/<id>/groups` - Gérer groupes
+- `GET /api/v1/users/<parent_id>/children` - Liste des enfants d'un parent
+- `PUT /api/v1/users/<parent_id>/children` - Associer/retirer des enfants (admin)
+- `GET /api/v1/users/students` - Lister tous les élèves (admin)
 
 #### Groupes (`/api/v1/groups`)
 - `GET /api/v1/groups` - Lister groupes
@@ -128,7 +182,7 @@ Un compte administrateur est créé automatiquement au premier lancement :
 - `DELETE /api/v1/feed/<id>` - Supprimer annonce (admin)
 
 #### Devoirs (`/api/v1/homeworks`)
-- `GET /api/v1/homeworks` - Lister devoirs
+- `GET /api/v1/homeworks` - Lister devoirs (accepte `?child_id=X` pour les parents)
 - `POST /api/v1/homeworks` - Créer devoir (prof/admin)
 - `PUT /api/v1/homeworks/<id>` - Modifier devoir
 - `DELETE /api/v1/homeworks/<id>` - Supprimer devoir
@@ -141,12 +195,14 @@ Un compte administrateur est créé automatiquement au premier lancement :
 - `DELETE /api/v1/mail/<id>` - Supprimer message
 
 #### Calendrier (`/api/v1/calendar`)
-- `GET /api/v1/calendar` - Lister événements
+- `GET /api/v1/calendar` - Lister événements (accepte `?child_id=X` pour les parents)
+- `POST /api/v1/calendar` - Créer événement (prof/admin)
 - `POST /api/v1/calendar/import` - Importer .ics (admin)
+- `PUT /api/v1/calendar/<id>` - Modifier événement
 - `DELETE /api/v1/calendar/<id>` - Supprimer événement (admin)
 
 #### Notes (`/api/v1/notes`)
-- `GET /api/v1/notes` - Lister notes
+- `GET /api/v1/notes` - Lister notes (accepte `?child_id=X` pour les parents)
 - `POST /api/v1/notes` - Ajouter note (prof/admin)
 - `PUT /api/v1/notes/<id>` - Modifier note
 - `DELETE /api/v1/notes/<id>` - Supprimer note
@@ -177,12 +233,99 @@ Le token JWT contient :
 ### Rôles disponibles
 - **eleve** : Élève
 - **prof** : Professeur
+- **parent** : Parent d'élève
 - **admin** : Administrateur
 
 ### Permissions par rôle
-- **Élève** : Consulter ses devoirs, notes, messages, calendrier
-- **Professeur** : Créer devoirs, notes pour ses groupes
-- **Admin** : Accès complet à toutes les fonctionnalités
+
+#### 👨‍🎓 Élève
+- Consulter ses devoirs (avec marquage fait/non fait)
+- Consulter ses notes avec moyennes par matière
+- Envoyer et recevoir des messages
+- Consulter son emploi du temps
+
+#### 👨‍🏫 Professeur
+- Créer et gérer des devoirs pour ses groupes
+- Attribuer et modifier des notes pour ses élèves
+- Envoyer des messages aux élèves et collègues
+- Consulter l'emploi du temps de ses groupes
+
+#### 👨‍👩‍👧‍👦 Parent
+- **Sélecteur d'enfant** sur toutes les pages (Devoirs, Notes, Calendrier)
+- Consulter les devoirs de chaque enfant individuellement
+- Voir les notes et moyennes par matière de chaque enfant
+- Accéder à l'emploi du temps de chaque enfant
+- Vue globale de tous les enfants ou vue filtrée par enfant
+
+#### 👨‍💼 Administrateur
+- Gérer tous les utilisateurs (création, modification, suppression)
+- **Onglet dédié "Parents"** pour gérer les comptes parents et associer les enfants
+- Créer et gérer les groupes/classes
+- Publier des annonces sur le fil d'actualités
+- Accès complet à toutes les fonctionnalités du système
+
+### 👪 Fonctionnalités Comptes Parents
+
+#### Pour l'Administrateur
+
+1. **Créer un compte parent** :
+   - Via l'onglet "Utilisateurs" → Nouveau utilisateur → Rôle "Parent"
+   - Ou directement via l'onglet "Parents"
+
+2. **Gérer les associations parent-enfant** :
+   - Accéder à l'onglet "Parents" dans le panneau admin
+   - Cliquer sur "Gérer les enfants" pour un parent
+   - Sélectionner les élèves à associer via checkboxes
+   - Visualiser en temps réel les enfants associés avec leurs classes
+
+3. **Interface dédiée** :
+   - Tableau récapitulatif : nom du parent, email, liste des enfants avec leurs groupes
+   - Recherche rapide pour filtrer les parents
+   - Actions : Gérer enfants, Éditer, Supprimer
+
+#### Pour le Parent
+
+1. **Connexion** :
+   - Se connecter avec ses identifiants
+   - Accès automatique au tableau de bord
+
+2. **Sélecteur d'enfant** :
+   - Présent sur les pages : **Devoirs**, **Notes**, **Calendrier**
+   - Options : "Tous les enfants" ou sélection individuelle
+   - Interface intuitive avec icône famille
+
+3. **Consultation des données** :
+   - **Notes** : Moyennes par matière, détail de chaque note
+   - **Devoirs** : À faire, terminés, en retard (filtrable par enfant)
+   - **Emploi du temps** : Cours et événements (filtrable par enfant)
+
+#### API pour les Parents
+
+Toutes les routes supportent le paramètre `child_id` :
+
+```bash
+# Notes d'un enfant spécifique
+GET /api/v1/notes?child_id=5
+
+# Devoirs d'un enfant spécifique  
+GET /api/v1/homeworks?child_id=5
+
+# Emploi du temps d'un enfant spécifique
+GET /api/v1/calendar?child_id=5
+```
+
+**Configuration via API** :
+```bash
+# Associer des enfants à un parent
+PUT /api/v1/users/<parent_id>/children
+{
+  "add_children": [1, 2, 3],
+  "remove_children": [4]
+}
+
+# Lister les enfants d'un parent
+GET /api/v1/users/<parent_id>/children
+```
 
 ## 🛠️ Développement
 
@@ -216,6 +359,23 @@ flask run --debug
 
 Ce projet est sous licence **AGPLv3**. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
 
+## 🎯 Roadmap
+
+### Fonctionnalités Prévues
+- [ ] Notifications en temps réel (WebSocket)
+- [ ] Export PDF des notes et bulletins
+- [ ] Système de permissions granulaires
+- [ ] Multi-établissements
+- [ ] API GraphQL en complément de REST
+- [ ] Application mobile (React Native)
+- [ ] Intégration avec pronote.net
+
+### Améliorations en cours
+- [ ] Amélioration de l'import/export .ics
+- [ ] Gestion des absences
+- [ ] Système de punitions/récompenses
+- [ ] Cahier de texte numérique
+
 ## 🤝 Contribution
 
 Les contributions sont les bienvenues ! N'hésitez pas à :
@@ -225,6 +385,12 @@ Les contributions sont les bienvenues ! N'hésitez pas à :
 3. Commit vos changements (`git commit -m 'Add some AmazingFeature'`)
 4. Push vers la branche (`git push origin feature/AmazingFeature`)
 5. Ouvrir une Pull Request
+
+### Guidelines de contribution
+- Code en français (commentaires et noms de variables)
+- Respecter la structure existante
+- Ajouter des tests si possible
+- Mettre à jour la documentation
 
 ## 📧 Contact
 

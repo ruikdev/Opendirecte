@@ -17,6 +17,7 @@ if (user.role === 'prof' || user.role === 'admin') {
 let currentWeekOffset = 0;
 let allEvents = [];
 let allGroups = [];
+let selectedChildId = null; // Pour les parents
 
 // Fonction de déconnexion
 function logout() {
@@ -24,6 +25,56 @@ function logout() {
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user');
     window.location.href = '/';
+}
+
+// Charger les enfants pour un parent
+async function loadChildren() {
+    if (user.role !== 'parent') return;
+    
+    try {
+        const response = await fetch(`/api/v1/users/${user.id}/children`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (!response.ok) throw new Error('Failed to load children');
+        
+        const data = await response.json();
+        
+        if (data.children && data.children.length > 0) {
+            // Insérer le sélecteur d'enfant avant la navigation de semaine
+            const container = document.querySelector('.container.mx-auto.px-4.py-8.max-w-7xl');
+            const weekNav = document.querySelector('.bg-white.rounded-xl.shadow-lg.p-4.mb-6');
+            
+            const selector = document.createElement('div');
+            selector.className = 'mb-6 p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-lg border-2 border-orange-200';
+            selector.innerHTML = `
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    <svg class="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                    </svg>
+                    Sélectionner un enfant
+                </label>
+                <select id="childSelectorCalendar" onchange="onChildChangeCalendar()" class="w-full px-4 py-3 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white shadow-sm">
+                    <option value="">-- Tous les enfants --</option>
+                    ${data.children.map(child => `
+                        <option value="${child.id}">${child.username} (${child.email})</option>
+                    `).join('')}
+                </select>
+            `;
+            container.insertBefore(selector, weekNav);
+        }
+    } catch (error) {
+        console.error('Error loading children:', error);
+    }
+}
+
+// Gestionnaire de changement de sélection d'enfant pour le calendrier
+function onChildChangeCalendar() {
+    const selector = document.getElementById('childSelectorCalendar');
+    selectedChildId = selector.value ? parseInt(selector.value) : null;
+    loadEvents();
 }
 
 // Charger les groupes de l'utilisateur
@@ -71,7 +122,13 @@ function populateGroupSelect() {
 // Charger les événements du calendrier
 async function loadEvents() {
     try {
-        const response = await fetch('/api/v1/calendar', {
+        // Construire l'URL avec le paramètre child_id si nécessaire
+        let url = '/api/v1/calendar';
+        if (user.role === 'parent' && selectedChildId) {
+            url += `?child_id=${selectedChildId}`;
+        }
+        
+        const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -456,6 +513,9 @@ function escapeHtml(text) {
 
 // Initialisation
 document.addEventListener('DOMContentLoaded', async () => {
+    if (user.role === 'parent') {
+        await loadChildren();
+    }
     await loadGroups();
     await loadEvents();
 });

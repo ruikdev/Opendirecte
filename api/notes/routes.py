@@ -34,13 +34,28 @@ def list_students():
 @notes_bp.route('', methods=['GET'])
 @jwt_required()
 def list_notes():
-    """Lister les notes (admin: toutes, prof: leurs notes, élève: leurs notes)"""
+    """Lister les notes (admin: toutes, prof: leurs notes, élève: leurs notes, parent: notes de leurs enfants)"""
     current_user = get_current_user()
+    
+    # Paramètre optionnel pour les parents: child_id
+    child_id = request.args.get('child_id', type=int)
     
     if current_user.role == 'admin':
         notes = Note.query.all()
     elif current_user.role == 'prof':
         notes = Note.query.filter_by(teacher_id=current_user.id).all()
+    elif current_user.role == 'parent':
+        # Parent voit les notes de ses enfants
+        if child_id:
+            # Vérifier que l'enfant appartient bien au parent
+            child = User.query.get(child_id)
+            if not child or child not in current_user.children:
+                return jsonify({'error': 'Child not found or not associated with your account'}), 403
+            notes = Note.query.filter_by(student_id=child_id).all()
+        else:
+            # Récupérer toutes les notes de tous les enfants
+            child_ids = [c.id for c in current_user.children]
+            notes = Note.query.filter(Note.student_id.in_(child_ids)).all() if child_ids else []
     else:  # eleve
         notes = Note.query.filter_by(student_id=current_user.id).all()
     

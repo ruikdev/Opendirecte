@@ -9,6 +9,12 @@ user_groups = db.Table('user_groups',
     db.Column('group_id', db.Integer, db.ForeignKey('groups.id'), primary_key=True)
 )
 
+# Table d'association pour la relation many-to-many Parent-Enfant
+parent_children = db.Table('parent_children',
+    db.Column('parent_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
+    db.Column('child_id', db.Integer, db.ForeignKey('users.id'), primary_key=True)
+)
+
 
 class User(db.Model):
     """Modèle Utilisateur"""
@@ -18,7 +24,7 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(20), nullable=False)  # eleve, prof, admin
+    role = db.Column(db.String(20), nullable=False)  # eleve, prof, admin, parent
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relations
@@ -29,7 +35,14 @@ class User(db.Model):
     notes_given = db.relationship('Note', foreign_keys='Note.teacher_id', backref='teacher', cascade='all, delete-orphan')
     notes_received = db.relationship('Note', foreign_keys='Note.student_id', backref='student', cascade='all, delete-orphan')
     
-    def to_dict(self, include_groups=True):
+    # Relations parent-enfant
+    children = db.relationship('User', 
+                               secondary=parent_children,
+                               primaryjoin=id==parent_children.c.parent_id,
+                               secondaryjoin=id==parent_children.c.child_id,
+                               backref=db.backref('parents', lazy='dynamic'))
+    
+    def to_dict(self, include_groups=True, include_children=False):
         """Sérialisation en dictionnaire"""
         data = {
             'id': self.id,
@@ -40,6 +53,8 @@ class User(db.Model):
         }
         if include_groups:
             data['groups'] = [g.to_dict(include_members=False) for g in self.groups]
+        if include_children and self.role == 'parent':
+            data['children'] = [{'id': c.id, 'username': c.username, 'email': c.email} for c in self.children]
         return data
 
 

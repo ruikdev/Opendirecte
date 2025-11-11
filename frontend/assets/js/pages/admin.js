@@ -58,6 +58,7 @@ async function loadUsers() {
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                                     u.role === 'admin' ? 'bg-purple-100 text-purple-800' :
                                     u.role === 'prof' ? 'bg-blue-100 text-blue-800' :
+                                    u.role === 'parent' ? 'bg-yellow-100 text-yellow-800' :
                                     'bg-green-100 text-green-800'
                                 }">${u.role}</span>
                             </td>
@@ -555,3 +556,184 @@ async function deleteAnnouncement(announcementId) {
 loadUsers();
 loadGroups();
 loadAnnouncements();
+loadParents();
+
+// Parents management
+async function loadParents() {
+    try {
+        const response = await apiRequest('/users');
+        if (!response.ok) throw new Error('Failed to load users');
+        
+        const data = await response.json();
+        const parents = data.users.filter(u => u.role === 'parent');
+        const table = document.getElementById('parentsTable');
+        
+        if (parents.length === 0) {
+            table.innerHTML = '<p class="text-gray-500 text-center py-8">Aucun compte parent</p>';
+            return;
+        }
+        
+        // Charger les informations des enfants pour chaque parent
+        const parentsWithChildren = await Promise.all(parents.map(async (parent) => {
+            try {
+                const childrenResp = await apiRequest(`/users/${parent.id}/children`);
+                const childrenData = await childrenResp.json();
+                return { ...parent, children: childrenData.children || [] };
+            } catch {
+                return { ...parent, children: [] };
+            }
+        }));
+        
+        table.innerHTML = `
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parent</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Enfants</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    ${parentsWithChildren.map(p => `
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex items-center">
+                                    <div class="flex-shrink-0 h-10 w-10 bg-yellow-100 rounded-full flex items-center justify-center">
+                                        <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                        </svg>
+                                    </div>
+                                    <div class="ml-4">
+                                        <div class="text-sm font-medium text-gray-900">${p.username}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${p.email}</td>
+                            <td class="px-6 py-4">
+                                <div class="text-sm text-gray-900">
+                                    ${p.children.length > 0 ? 
+                                        p.children.map(c => `
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 mr-2 mb-1">
+                                                ${c.username}
+                                                ${c.groups && c.groups.length > 0 ? `<span class="ml-1 text-green-600">(${c.groups.join(', ')})</span>` : ''}
+                                            </span>
+                                        `).join('') 
+                                        : '<span class="text-gray-400 italic">Aucun enfant associé</span>'
+                                    }
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <button onclick="manageParentChildren(${p.id})" class="text-blue-600 hover:text-blue-900 mr-3">
+                                    Gérer les enfants
+                                </button>
+                                <button onclick="editUser(${p.id})" class="text-green-600 hover:text-green-900 mr-3">Éditer</button>
+                                <button onclick="deleteUser(${p.id}, '${p.username}')" class="text-red-600 hover:text-red-900">Supprimer</button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    } catch (error) {
+        console.error('Error loading parents:', error);
+    }
+}
+
+async function manageParentChildren(parentId) {
+    try {
+        const [parentResp, studentsResp, childrenResp] = await Promise.all([
+            apiRequest(`/users/${parentId}`),
+            apiRequest('/users/students'),
+            apiRequest(`/users/${parentId}/children`)
+        ]);
+        
+        const parent = await parentResp.json();
+        const studentsData = await studentsResp.json();
+        const childrenData = await childrenResp.json();
+        
+        const currentChildIds = childrenData.children.map(c => c.id);
+        
+        const studentsHtml = studentsData.students.map(s => `
+            <label class="flex items-center justify-between p-3 hover:bg-gray-50 rounded border border-gray-200 mb-2">
+                <div class="flex items-center space-x-3">
+                    <input type="checkbox" value="${s.id}" ${currentChildIds.includes(s.id) ? 'checked' : ''} 
+                           class="rounded text-blue-600 focus:ring-blue-500">
+                    <div>
+                        <div class="font-medium text-gray-900">${s.username}</div>
+                        <div class="text-sm text-gray-500">${s.email}</div>
+                    </div>
+                </div>
+                <div class="text-xs text-gray-500">
+                    ${s.groups && s.groups.length > 0 ? s.groups.join(', ') : 'Aucun groupe'}
+                </div>
+            </label>
+        `).join('');
+        
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+        modal.innerHTML = `
+            <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-xl font-bold text-gray-900">Enfants de ${parent.username}</h3>
+                    <p class="text-sm text-gray-600 mt-1">Sélectionnez les élèves associés à ce compte parent</p>
+                </div>
+                <div class="px-6 py-4 max-h-96 overflow-y-auto">
+                    ${studentsData.students.length > 0 ? studentsHtml : '<p class="text-gray-500 text-center py-4">Aucun élève disponible</p>'}
+                </div>
+                <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+                    <button onclick="this.closest('.fixed').remove()" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Annuler</button>
+                    <button onclick="saveParentChildren(${parentId}, this)" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Enregistrer</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Erreur lors du chargement des données');
+    }
+}
+
+async function saveParentChildren(parentId, button) {
+    const modal = button.closest('.fixed');
+    const checkboxes = modal.querySelectorAll('input[type="checkbox"]');
+    const selectedChildren = Array.from(checkboxes)
+        .filter(cb => cb.checked)
+        .map(cb => parseInt(cb.value));
+    
+    try {
+        const childrenResp = await apiRequest(`/users/${parentId}/children`);
+        const childrenData = await childrenResp.json();
+        const currentChildren = childrenData.children.map(c => c.id);
+        
+        const toAdd = selectedChildren.filter(id => !currentChildren.includes(id));
+        const toRemove = currentChildren.filter(id => !selectedChildren.includes(id));
+        
+        const response = await apiRequest(`/users/${parentId}/children`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                add_children: toAdd,
+                remove_children: toRemove
+            })
+        });
+        
+        if (!response.ok) throw new Error('Failed to update children');
+        
+        modal.remove();
+        loadParents();
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Erreur lors de la sauvegarde');
+    }
+}
+
+// Search parents
+document.getElementById('parentSearch').addEventListener('input', (e) => {
+    const search = e.target.value.toLowerCase();
+    const rows = document.querySelectorAll('#parentsTable tbody tr');
+    
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(search) ? '' : 'none';
+    });
+});

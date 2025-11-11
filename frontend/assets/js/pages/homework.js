@@ -10,6 +10,7 @@ document.getElementById('userName').textContent = user.username || '';
 
 let currentFilter = 'all';
 let allHomeworks = [];
+let selectedChildId = null; // Pour les parents
 
 // Fonction de déconnexion
 function logout() {
@@ -19,6 +20,52 @@ function logout() {
     window.location.href = '/';
 }
 
+// Charger les enfants pour un parent
+async function loadChildren() {
+    if (user.role !== 'parent') return;
+    
+    try {
+        const response = await fetch(`/api/v1/users/${user.id}/children`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (!response.ok) throw new Error('Failed to load children');
+        
+        const data = await response.json();
+        
+        if (data.children && data.children.length > 0) {
+            // Insérer le sélecteur d'enfant dans le header
+            const headerActions = document.querySelector('.flex.items-center.justify-between').querySelector('.flex.items-center.space-x-2');
+            
+            const selector = document.createElement('div');
+            selector.className = 'mr-4';
+            selector.innerHTML = `
+                <select id="childSelectorHomework" onchange="onChildChangeHomework()" class="px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm">
+                    <option value="">-- Tous les enfants --</option>
+                    ${data.children.map(child => `
+                        <option value="${child.id}">${child.username}</option>
+                    `).join('')}
+                </select>
+            `;
+            headerActions.parentNode.insertBefore(selector, headerActions);
+            
+            // Afficher les filtres pour les parents
+            document.getElementById('studentFilters').classList.remove('hidden');
+        }
+    } catch (error) {
+        console.error('Error loading children:', error);
+    }
+}
+
+// Gestionnaire de changement de sélection d'enfant pour les devoirs
+function onChildChangeHomework() {
+    const selector = document.getElementById('childSelectorHomework');
+    selectedChildId = selector.value ? parseInt(selector.value) : null;
+    loadHomeworks();
+}
+
 // Afficher les filtres et bouton d'ajout selon le rôle
 if (user.role === 'eleve') {
     document.getElementById('studentFilters').classList.remove('hidden');
@@ -26,6 +73,8 @@ if (user.role === 'eleve') {
     document.getElementById('addHomeworkBtn').classList.remove('hidden');
     document.getElementById('addHomeworkBtn').addEventListener('click', openNewHomeworkModal);
     loadGroups();
+} else if (user.role === 'parent') {
+    loadChildren();
 }
 
 // Charger les groupes pour le formulaire
@@ -72,8 +121,18 @@ function filterHomeworks(status) {
 async function loadHomeworks() {
     try {
         let url = '/api/v1/homeworks';
-        if (user.role === 'eleve' && currentFilter !== 'all') {
-            url += `?status=${currentFilter}`;
+        const params = [];
+        
+        if ((user.role === 'eleve' || user.role === 'parent') && currentFilter !== 'all') {
+            params.push(`status=${currentFilter}`);
+        }
+        
+        if (user.role === 'parent' && selectedChildId) {
+            params.push(`child_id=${selectedChildId}`);
+        }
+        
+        if (params.length > 0) {
+            url += '?' + params.join('&');
         }
         
         const response = await fetch(url, {

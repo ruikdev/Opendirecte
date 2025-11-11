@@ -6,6 +6,7 @@ document.getElementById('userName').textContent = user.username || '';
 
 let students = [];
 let notes = [];
+let selectedChildId = null;
 
 // Load students
 async function loadStudents() {
@@ -26,10 +27,48 @@ async function loadStudents() {
     }
 }
 
+// Load children for parents
+async function loadChildren() {
+    if (user.role !== 'parent') return;
+    
+    try {
+        const response = await apiRequest(`/users/${user.id}/children`);
+        if (!response.ok) throw new Error('Failed to load children');
+        
+        const data = await response.json();
+        
+        if (data.children && data.children.length > 0) {
+            const container = document.getElementById('childSelectorContainer');
+            container.innerHTML = `
+                <select id="childSelectorGrades" onchange="onChildChangeGrades()" class="px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm">
+                    <option value="">-- Tous les enfants --</option>
+                    ${data.children.map(child => `
+                        <option value="${child.id}">${child.username}</option>
+                    `).join('')}
+                </select>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading children:', error);
+    }
+}
+
+// Child selector change handler
+function onChildChangeGrades() {
+    const selector = document.getElementById('childSelectorGrades');
+    selectedChildId = selector ? (selector.value ? parseInt(selector.value) : null) : null;
+    loadNotes();
+}
+
 // Load notes
 async function loadNotes() {
     try {
-        const response = await apiRequest('/notes');
+        let url = '/notes';
+        if (user.role === 'parent' && selectedChildId) {
+            url += `?child_id=${selectedChildId}`;
+        }
+        
+        const response = await apiRequest(url);
         if (!response.ok) throw new Error('Failed to load notes');
         
         const data = await response.json();
@@ -181,5 +220,9 @@ document.getElementById('noteSearch').addEventListener('input', (e) => {
 });
 
 // Init
-loadStudents();
+if (user.role === 'prof' || user.role === 'admin') {
+    loadStudents();
+} else if (user.role === 'parent') {
+    loadChildren();
+}
 loadNotes();

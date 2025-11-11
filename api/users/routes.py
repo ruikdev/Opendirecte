@@ -50,7 +50,7 @@ def create_user():
     if not all(field in data for field in required_fields):
         return jsonify({'error': 'Missing required fields'}), 400
     
-    if data['role'] not in ['eleve', 'prof', 'admin']:
+    if data['role'] not in ['eleve', 'prof', 'admin', 'parent']:
         return jsonify({'error': 'Invalid role'}), 400
     
     # Vérifier si l'utilisateur existe déjà
@@ -130,7 +130,7 @@ def update_user(user_id):
         user.password = bcrypt.generate_password_hash(data['password']).decode('utf-8')
     
     if 'role' in data and current_user.role == 'admin':
-        if data['role'] not in ['eleve', 'prof', 'admin']:
+        if data['role'] not in ['eleve', 'prof', 'admin', 'parent']:
             return jsonify({'error': 'Invalid role'}), 400
         user.role = data['role']
     
@@ -185,4 +185,76 @@ def manage_user_groups(user_id):
     return jsonify({
         'message': 'User groups updated successfully',
         'user': user.to_dict()
+    }), 200
+
+
+@users_bp.route('/<int:parent_id>/children', methods=['GET'])
+@jwt_required()
+def get_parent_children(parent_id):
+    """Obtenir la liste des enfants d'un parent"""
+    current_user = get_current_user()
+    
+    # Vérifier que c'est le parent lui-même ou un admin
+    if not is_owner_or_admin(current_user, parent_id):
+        return jsonify({'error': 'Insufficient permissions'}), 403
+    
+    parent = User.query.get(parent_id)
+    if not parent:
+        return jsonify({'error': 'Parent not found'}), 404
+    
+    if parent.role != 'parent':
+        return jsonify({'error': 'User is not a parent'}), 400
+    
+    return jsonify({
+        'children': [{'id': c.id, 'username': c.username, 'email': c.email, 'groups': [g.name for g in c.groups]} for c in parent.children]
+    }), 200
+
+
+@users_bp.route('/<int:parent_id>/children', methods=['PUT'])
+@jwt_required()
+@admin_required
+def manage_parent_children(parent_id):
+    """Ajouter ou retirer des enfants d'un compte parent (admin uniquement)"""
+    parent = User.query.get(parent_id)
+    if not parent:
+        return jsonify({'error': 'Parent not found'}), 404
+    
+    if parent.role != 'parent':
+        return jsonify({'error': 'User is not a parent'}), 400
+    
+    data = request.get_json()
+    
+    if 'add_children' in data:
+        for child_id in data['add_children']:
+            child = User.query.get(child_id)
+            if not child:
+                return jsonify({'error': f'Child {child_id} not found'}), 404
+            if child.role != 'eleve':
+                return jsonify({'error': f'User {child_id} is not a student'}), 400
+            if child not in parent.children:
+                parent.children.append(child)
+    
+    if 'remove_children' in data:
+        for child_id in data['remove_children']:
+            child = User.query.get(child_id)
+            if child and child in parent.children:
+                parent.children.remove(child)
+    
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Parent children updated successfully',
+        'parent': parent.to_dict(include_children=True)
+    }), 200
+
+
+@users_bp.route('/students', methods=['GET'])
+@jwt_required()
+@admin_required
+def list_students():
+    """Lister tous les élèves (admin uniquement, pour l'association parent-enfant)"""
+    students = User.query.filter_by(role='eleve').all()
+    
+    return jsonify({
+        'students': [{'id': s.id, 'username': s.username, 'email': s.email, 'groups': [g.name for g in s.groups]} for s in students]
     }), 200

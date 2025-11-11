@@ -56,6 +56,9 @@
                 <button onclick="switchTab('announcements')" id="tab-announcements" class="tab-button border-b-2 border-transparent py-4 px-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300">
                     Annonces
                 </button>
+                <button onclick="switchTab('parents')" id="tab-parents" class="tab-button border-b-2 border-transparent py-4 px-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                    Parents
+                </button>
             </nav>
         </div>
 
@@ -115,6 +118,22 @@
                 </div>
             </div>
         </div>
+
+        <!-- Parents Tab -->
+        <div id="parents-content" class="tab-content hidden">
+            <div class="bg-white rounded-lg shadow">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-xl font-bold text-gray-900">Gestion des comptes parents</h2>
+                    <p class="text-sm text-gray-600 mt-1">Gérez les comptes parents et leurs enfants associés</p>
+                </div>
+                <div class="p-6">
+                    <div class="mb-4">
+                        <input type="text" id="parentSearch" placeholder="Rechercher un parent..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    <div id="parentsTable" class="overflow-x-auto"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Modal Create/Edit User -->
@@ -140,6 +159,7 @@
                             <option value="eleve">Élève</option>
                             <option value="prof">Professeur</option>
                             <option value="admin">Administrateur</option>
+                            <option value="parent">Parent</option>
                         </select>
                     </div>
                     <div id="passwordField">
